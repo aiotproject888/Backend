@@ -40,6 +40,25 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
+app.get('/api/models', async (req, res) => {
+  try {
+    const list = await groq.models.list();
+    const modelIds = list.data.map(m => m.id);
+
+    res.json({
+      success: true,
+      models: modelIds
+    });
+  } catch (error) {
+    console.error('Groq Models Error:', error);
+
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Backend Server running on port ${PORT}`);
