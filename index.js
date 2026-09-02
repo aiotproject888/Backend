@@ -581,10 +581,6 @@ app.post('/api/materials/process', async (req, res) => {
       contentType,
     } = req.body;
 
-    // --------------------------------------------------------
-    // ตรวจสอบข้อมูล
-    // --------------------------------------------------------
-
     if (!storageKey) {
       return res.status(400).json({
         success: false,
@@ -592,95 +588,37 @@ app.post('/api/materials/process', async (req, res) => {
       });
     }
 
-    if (!fileName) {
-      return res.status(400).json({
-        success: false,
-        message: 'fileName is required',
-      });
-    }
+    console.log('กำลังดาวน์โหลดไฟล์จาก B2:', storageKey);
 
-    if (!contentType) {
-      return res.status(400).json({
-        success: false,
-        message: 'contentType is required',
-      });
-    }
+    const fileBuffer = await downloadFileFromB2(storageKey);
 
     console.log(
-      `Processing file: ${fileName}`
+      'ดาวน์โหลดสำเร็จ ขนาด:',
+      fileBuffer.length,
+      'bytes'
     );
 
-    // --------------------------------------------------------
-    // ดาวน์โหลดไฟล์จาก B2
-    // --------------------------------------------------------
-
-    const fileBuffer =
-      await downloadFileFromB2(storageKey);
-
-    console.log(
-      `Downloaded ${fileBuffer.length} bytes`
+    // ตรงนี้ค่อยส่งไป extract text
+    const extractedText = await extractTextFromFile(
+      fileBuffer,
+      fileName,
+      contentType
     );
-
-    // --------------------------------------------------------
-    // Extract Text
-    // --------------------------------------------------------
-
-    const result =
-      await extractTextFromFile(
-        fileBuffer,
-        fileName,
-        contentType
-      );
-
-    const extractedText =
-      result.text.trim();
-
-    // --------------------------------------------------------
-    // ตรวจสอบว่ามีข้อความหรือไม่
-    // --------------------------------------------------------
-
-    if (!extractedText) {
-      return res.status(422).json({
-        success: false,
-        message:
-          'ไม่สามารถอ่านข้อความจากไฟล์ได้',
-        fileName,
-        fileType: result.type,
-      });
-    }
-
-    console.log(
-      `Extracted ${extractedText.length} characters`
-    );
-
-    // --------------------------------------------------------
-    // ส่งข้อความกลับ
-    // --------------------------------------------------------
 
     return res.json({
       success: true,
-      message:
-        'อ่านเนื้อหาไฟล์สำเร็จ',
-
       fileName,
-      fileType: result.type,
-
-      textLength:
-        extractedText.length,
-
+      fileType: contentType,
+      textLength: extractedText.length,
       extractedText,
     });
 
   } catch (error) {
-    console.error(
-      'Extract Text Error:',
-      error
-    );
+    console.error('Process Material Error:', error);
 
     return res.status(500).json({
       success: false,
-      message:
-        'ไม่สามารถอ่านเนื้อหาไฟล์ได้',
+      message: 'ไม่สามารถอ่านเนื้อหาไฟล์ได้',
       error: error.message,
     });
   }
