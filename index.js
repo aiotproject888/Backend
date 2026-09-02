@@ -3,16 +3,49 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import Groq from 'groq-sdk';
 
+import {
+  S3Client,
+  HeadBucketCommand,
+  PutObjectCommand,
+} from '@aws-sdk/client-s3';
+
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+
 dotenv.config();
 
 const app = express();
+
 app.use(cors());
 app.use(express.json());
+
+
+// ============================================================
+// GROQ
+// ============================================================
 
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
+
+// ============================================================
+// BACKBLAZE B2
+// ============================================================
+
+const b2 = new S3Client({
+  endpoint: process.env.B2_ENDPOINT,
+  region: process.env.B2_REGION,
+
+  credentials: {
+    accessKeyId: process.env.B2_KEY_ID,
+    secretAccessKey: process.env.B2_APPLICATION_KEY,
+  },
+});
+
+
+// ============================================================
+// CHAT API
+// ============================================================
 
 app.post('/api/chat', async (req, res) => {
   try {
@@ -179,9 +212,14 @@ ${emotionData ? JSON.stringify(emotionData) : 'ไม่มีข้อมูล
 });
 
 
+// ============================================================
+// GROQ MODELS API
+// ============================================================
+
 app.get('/api/models', async (req, res) => {
   try {
     const list = await groq.models.list();
+
     const modelIds = list.data.map(m => m.id);
 
     res.json({
@@ -200,8 +238,153 @@ app.get('/api/models', async (req, res) => {
 });
 
 
+// ============================================================
+// BACKBLAZE B2 CONNECTION TEST
+// ============================================================
+
+app.get('/api/b2-test', async (req, res) => {
+  try {
+    await b2.send(
+      new HeadBucketCommand({
+        Bucket: process.env.B2_BUCKET_NAME,
+      })
+    );
+
+    res.json({
+      success: true,
+      message: 'Backblaze B2 connected successfully',
+      bucket: process.env.B2_BUCKET_NAME,
+    });
+
+  } catch (error) {
+    console.error('B2 Error:', error);
+
+    res.status(500).json({
+      success: false,
+      message: 'Backblaze B2 connection failed',
+      error: error.message,
+    });
+  }
+});
+
+
+// ============================================================
+// BACKBLAZE B2 - CREATE PRESIGNED UPLOAD URL
+// ============================================================
+
+app.post('/api/materials/upload-url', async (req, res) => {
+  try {
+
+    const {
+      fileName,
+      contentType,
+    } = req.body;
+
+
+    // --------------------------------------------------------
+    // ตรวจสอบข้อมูล
+    // --------------------------------------------------------
+
+    if (!fileName) {
+      return res.status(400).json({
+        success: false,
+        message: 'fileName is required',
+      });
+    }
+
+
+    if (!contentType) {
+      return res.status(400).json({
+        success: false,
+        message: 'contentType is required',
+      });
+    }
+
+
+    // --------------------------------------------------------
+    // สร้างชื่อไฟล์สำหรับเก็บใน B2
+    //
+    // ตอนนี้ใช้ชื่อไฟล์เดิม
+    // ภายหลังสามารถเปลี่ยนเป็น subjectCode/year/month ได้
+    // --------------------------------------------------------
+
+    const storageKey =
+      `materials/${Date.now()}-${fileName}`;
+
+
+    // --------------------------------------------------------
+    // สร้างคำสั่ง Upload
+    // --------------------------------------------------------
+
+    const command = new PutObjectCommand({
+      Bucket: process.env.B2_BUCKET_NAME,
+
+      Key: storageKey,
+
+      ContentType: contentType,
+    });
+
+
+    // --------------------------------------------------------
+    // สร้าง Presigned URL
+    //
+    // URL นี้มีอายุ 10 นาที
+    // --------------------------------------------------------
+
+    const uploadUrl = await getSignedUrl(
+      b2,
+      command,
+      {
+        expiresIn: 600,
+      }
+    );
+
+
+    // --------------------------------------------------------
+    // ส่ง URL กลับไปให้ Flutter
+    // --------------------------------------------------------
+
+    return res.json({
+      success: true,
+
+      uploadUrl: uploadUrl,
+
+      storageKey: storageKey,
+
+      fileName: fileName,
+
+      contentType: contentType,
+
+      expiresIn: 600,
+    });
+
+  } catch (error) {
+
+    console.error(
+      'B2 Presigned URL Error:',
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+
+      message:
+        'ไม่สามารถสร้าง Presigned Upload URL ได้',
+
+      error: error.message,
+    });
+  }
+});
+
+
+// ============================================================
+// START SERVER
+// ============================================================
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log(`Backend Server running on port ${PORT}`);
+  console.log(
+    `Backend Server running on port ${PORT}`
+  );
 });
