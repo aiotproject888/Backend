@@ -7,6 +7,7 @@ import {
   S3Client,
   HeadBucketCommand,
   PutObjectCommand,
+  GetObjectCommand,
   GetBucketCorsCommand,
   PutBucketCorsCommand,
 } from '@aws-sdk/client-s3';
