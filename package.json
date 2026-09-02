@@ -19,6 +19,7 @@
     "groq-sdk": "^1.5.0",
     "mammoth": "^1.12.2",
     "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "^6.3.289",
     "pptx2json": "^0.0.10"
   }
 }

@@ -12,7 +12,7 @@ import {
   PutBucketCorsCommand,
 } from '@aws-sdk/client-s3';
 
-import { PDFParse } from 'pdf-parse';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import mammoth from 'mammoth';
 import PPTX2Json from 'pptx2json';
 
@@ -78,102 +78,59 @@ async function downloadFileFromB2(storageKey) {
 // EXTRACT TEXT FROM FILE
 // ============================================================
 
-async function extractTextFromFile(buffer, fileName, contentType) {
-  const extension =
-    fileName
-      .split('.')
-      .pop()
-      ?.toLowerCase();
+async function extractPdfText(buffer) {
+  const pdf = await pdfjsLib.getDocument({
+    data: new Uint8Array(buffer),
+  }).promise;
 
-  // ==========================================================
-  // PDF
-  // ==========================================================
+  let text = '';
 
-  if (
-    extension === 'pdf' ||
-    contentType === 'application/pdf'
-  ) {
-    const parser = new PDFParse({
-      data: buffer,
-    });
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+    const page = await pdf.getPage(pageNumber);
 
-    try {
-      const result = await parser.getText();
+    const content = await page.getTextContent();
 
-      return {
-        text: result.text || '',
-        type: 'pdf',
-      };
-    } finally {
-      await parser.destroy();
-    }
+    const pageText = content.items
+      .map((item) => item.str)
+      .join(' ');
+
+    text += pageText + '\n';
   }
 
-  // ==========================================================
-  // DOCX
-  // ==========================================================
+  return text.trim();
+} 
 
-  if (
-    extension === 'docx' ||
-    contentType ===
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-  ) {
-    const result = await mammoth.extractRawText({
-      buffer: buffer,
-    });
+async function extractTextFromFile(buffer, fileName, contentType) {
+  const ext = fileName.split('.').pop()?.toLowerCase();
+
+  if (ext === 'pdf' || contentType === 'application/pdf') {
+    const text = await extractPdfText(buffer);
 
     return {
-      text: result.value || '',
-      type: 'docx',
-      messages: result.messages || [],
+      text,
+      type: 'pdf',
     };
   }
 
-  // ==========================================================
-  // PPTX
-  // ==========================================================
-
+  // DOCX เดิม
   if (
-    extension === 'pptx' ||
-    contentType ===
-    'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+    ext === 'docx' ||
+    contentType?.includes(
+      'wordprocessingml'
+    )
   ) {
-    const pptxParser = new PPTX2Json();
-
-    const json = await pptxParser.toJson(buffer);
-
-    const texts = [];
-
-    function collectText(value) {
-      if (typeof value === 'string') {
-        texts.push(value);
-        return;
-      }
-
-      if (Array.isArray(value)) {
-        for (const item of value) {
-          collectText(item);
-        }
-        return;
-      }
-
-      if (value && typeof value === 'object') {
-        for (const key of Object.keys(value)) {
-          collectText(value[key]);
-        }
-      }
-    }
-
-    collectText(json);
+    const result = await mammoth.extractRawText({
+      buffer,
+    });
 
     return {
-      text: texts.join('\n'),
-      type: 'pptx',
+      text: result.value ?? '',
+      type: 'docx',
     };
   }
 
   throw new Error(
-    `ยังไม่รองรับไฟล์ประเภท .${extension}`
+    `ยังไม่รองรับไฟล์ประเภท ${contentType || ext}`
   );
 }
 
@@ -581,26 +538,17 @@ app.post('/api/materials/process', async (req, res) => {
       contentType,
     } = req.body;
 
-    if (!storageKey) {
+    if (!storageKey || !fileName) {
       return res.status(400).json({
         success: false,
-        message: 'storageKey is required',
+        message: 'storageKey และ fileName จำเป็น',
       });
     }
 
-    console.log('กำลังดาวน์โหลดไฟล์จาก B2:', storageKey);
+    const buffer = await downloadFileFromB2(storageKey);
 
-    const fileBuffer = await downloadFileFromB2(storageKey);
-
-    console.log(
-      'ดาวน์โหลดสำเร็จ ขนาด:',
-      fileBuffer.length,
-      'bytes'
-    );
-
-    // ตรงนี้ค่อยส่งไป extract text
-    const extractedText = await extractTextFromFile(
-      fileBuffer,
+    const extracted = await extractTextFromFile(
+      buffer,
       fileName,
       contentType
     );
@@ -609,12 +557,15 @@ app.post('/api/materials/process', async (req, res) => {
       success: true,
       fileName,
       fileType: contentType,
-      textLength: extractedText.length,
-      extractedText,
+      textLength: extracted.text.length,
+      extractedText: extracted,
     });
 
   } catch (error) {
-    console.error('Process Material Error:', error);
+    console.error(
+      'Material Process Error:',
+      error
+    );
 
     return res.status(500).json({
       success: false,
