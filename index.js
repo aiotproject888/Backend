@@ -11,6 +11,10 @@ import {
   PutBucketCorsCommand,
 } from '@aws-sdk/client-s3';
 
+import { PDFParse } from 'pdf-parse';
+import mammoth from 'mammoth';
+import PPTX2Json from 'pptx2json';
+
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 dotenv.config();
@@ -44,6 +48,133 @@ const b2 = new S3Client({
   },
 });
 
+// ============================================================
+// DOWNLOAD FILE FROM BACKBLAZE B2
+// ============================================================
+
+async function downloadFileFromB2(storageKey) {
+  const command = new GetObjectCommand({
+    Bucket: process.env.B2_BUCKET_NAME,
+    Key: storageKey,
+  });
+
+  const result = await b2.send(command);
+
+  if (!result.Body) {
+    throw new Error('ไม่สามารถดาวน์โหลดไฟล์จาก Backblaze B2 ได้');
+  }
+
+  const chunks = [];
+
+  for await (const chunk of result.Body) {
+    chunks.push(chunk);
+  }
+
+  return Buffer.concat(chunks);
+}
+
+// ============================================================
+// EXTRACT TEXT FROM FILE
+// ============================================================
+
+async function extractTextFromFile(buffer, fileName, contentType) {
+  const extension =
+    fileName
+      .split('.')
+      .pop()
+      ?.toLowerCase();
+
+  // ==========================================================
+  // PDF
+  // ==========================================================
+
+  if (
+    extension === 'pdf' ||
+    contentType === 'application/pdf'
+  ) {
+    const parser = new PDFParse({
+      data: buffer,
+    });
+
+    try {
+      const result = await parser.getText();
+
+      return {
+        text: result.text || '',
+        type: 'pdf',
+      };
+    } finally {
+      await parser.destroy();
+    }
+  }
+
+  // ==========================================================
+  // DOCX
+  // ==========================================================
+
+  if (
+    extension === 'docx' ||
+    contentType ===
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  ) {
+    const result = await mammoth.extractRawText({
+      buffer: buffer,
+    });
+
+    return {
+      text: result.value || '',
+      type: 'docx',
+      messages: result.messages || [],
+    };
+  }
+
+  // ==========================================================
+  // PPTX
+  // ==========================================================
+
+  if (
+    extension === 'pptx' ||
+    contentType ===
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+  ) {
+    const pptxParser = new PPTX2Json();
+
+    const json = await pptxParser.toJson(buffer);
+
+    const texts = [];
+
+    function collectText(value) {
+      if (typeof value === 'string') {
+        texts.push(value);
+        return;
+      }
+
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          collectText(item);
+        }
+        return;
+      }
+
+      if (value && typeof value === 'object') {
+        for (const key of Object.keys(value)) {
+          collectText(value[key]);
+        }
+      }
+    }
+
+    collectText(json);
+
+    return {
+      text: texts.join('\n'),
+      type: 'pptx',
+    };
+  }
+
+  throw new Error(
+    `ยังไม่รองรับไฟล์ประเภท .${extension}`
+  );
+}
 
 // ============================================================
 // CHAT API
@@ -437,7 +568,122 @@ app.get('/api/b2-cors-test', async (req, res) => {
   }
 });
 
+// ============================================================
+// MATERIALS - EXTRACT TEXT
+// ============================================================
 
+app.post('/api/materials/process', async (req, res) => {
+  try {
+    const {
+      storageKey,
+      fileName,
+      contentType,
+    } = req.body;
+
+    // --------------------------------------------------------
+    // ตรวจสอบข้อมูล
+    // --------------------------------------------------------
+
+    if (!storageKey) {
+      return res.status(400).json({
+        success: false,
+        message: 'storageKey is required',
+      });
+    }
+
+    if (!fileName) {
+      return res.status(400).json({
+        success: false,
+        message: 'fileName is required',
+      });
+    }
+
+    if (!contentType) {
+      return res.status(400).json({
+        success: false,
+        message: 'contentType is required',
+      });
+    }
+
+    console.log(
+      `Processing file: ${fileName}`
+    );
+
+    // --------------------------------------------------------
+    // ดาวน์โหลดไฟล์จาก B2
+    // --------------------------------------------------------
+
+    const fileBuffer =
+      await downloadFileFromB2(storageKey);
+
+    console.log(
+      `Downloaded ${fileBuffer.length} bytes`
+    );
+
+    // --------------------------------------------------------
+    // Extract Text
+    // --------------------------------------------------------
+
+    const result =
+      await extractTextFromFile(
+        fileBuffer,
+        fileName,
+        contentType
+      );
+
+    const extractedText =
+      result.text.trim();
+
+    // --------------------------------------------------------
+    // ตรวจสอบว่ามีข้อความหรือไม่
+    // --------------------------------------------------------
+
+    if (!extractedText) {
+      return res.status(422).json({
+        success: false,
+        message:
+          'ไม่สามารถอ่านข้อความจากไฟล์ได้',
+        fileName,
+        fileType: result.type,
+      });
+    }
+
+    console.log(
+      `Extracted ${extractedText.length} characters`
+    );
+
+    // --------------------------------------------------------
+    // ส่งข้อความกลับ
+    // --------------------------------------------------------
+
+    return res.json({
+      success: true,
+      message:
+        'อ่านเนื้อหาไฟล์สำเร็จ',
+
+      fileName,
+      fileType: result.type,
+
+      textLength:
+        extractedText.length,
+
+      extractedText,
+    });
+
+  } catch (error) {
+    console.error(
+      'Extract Text Error:',
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        'ไม่สามารถอ่านเนื้อหาไฟล์ได้',
+      error: error.message,
+    });
+  }
+});
 
 // START SERVER
 
