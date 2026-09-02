@@ -5,7 +5,7 @@ import Groq from 'groq-sdk';
 
 import {
   S3Client,
-   HeadBucketCommand,
+  HeadBucketCommand,
   PutObjectCommand,
   GetBucketCorsCommand,
   PutBucketCorsCommand,
@@ -54,12 +54,12 @@ app.post('/api/chat', async (req, res) => {
     const {
       message,
       history,
-      emotionData
+      emotionData,
     } = req.body;
 
-    // ==========================================
+    // ========================================================
     // System Prompt หลัก
-    // ==========================================
+    // ========================================================
 
     const systemPrompt = `
 คุณคือ "EmotiTeach AI" ผู้ช่วยด้านการเรียนรู้และการเรียนการสอนของแอป EmotiTeach
@@ -119,8 +119,10 @@ app.post('/api/chat', async (req, res) => {
 - ให้คำแนะนำที่สามารถนำไปปฏิบัติได้จริง
 - ห้ามวินิจฉัยโรคทางจิตเวช
 
-หากผู้ใช้กล่าวถึงอาการรุนแรง หรือปัญหาที่ส่งผลต่อชีวิตประจำวันอย่างมาก
-ให้แนะนำให้พูดคุยกับผู้เชี่ยวชาญหรือคนที่ไว้ใจได้อย่างเหมาะสม
+หากผู้ใช้กล่าวถึงอาการรุนแรง
+หรือปัญหาที่ส่งผลต่อชีวิตประจำวันอย่างมาก
+ให้แนะนำให้พูดคุยกับผู้เชี่ยวชาญ
+หรือคนที่ไว้ใจได้อย่างเหมาะสม
 
 ========================================
 การวิเคราะห์ข้อมูลอารมณ์
@@ -177,20 +179,20 @@ ${emotionData ? JSON.stringify(emotionData) : 'ไม่มีข้อมูล
     const messages = [
       {
         role: 'system',
-        content: systemPrompt
+        content: systemPrompt,
       },
 
       ...(history || []),
 
       {
         role: 'user',
-        content: message
-      }
+        content: message,
+      },
     ];
 
     const chatCompletion = await groq.chat.completions.create({
       messages: messages,
-      model: "openai/gpt-oss-20b",
+      model: 'openai/gpt-oss-20b',
       temperature: 0.7,
     });
 
@@ -200,7 +202,7 @@ ${emotionData ? JSON.stringify(emotionData) : 'ไม่มีข้อมูล
 
     res.json({
       success: true,
-      reply: reply
+      reply: reply,
     });
 
   } catch (error) {
@@ -208,7 +210,7 @@ ${emotionData ? JSON.stringify(emotionData) : 'ไม่มีข้อมูล
 
     res.status(500).json({
       success: false,
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -222,11 +224,11 @@ app.get('/api/models', async (req, res) => {
   try {
     const list = await groq.models.list();
 
-    const modelIds = list.data.map(m => m.id);
+    const modelIds = list.data.map((m) => m.id);
 
     res.json({
       success: true,
-      models: modelIds
+      models: modelIds,
     });
 
   } catch (error) {
@@ -234,7 +236,7 @@ app.get('/api/models', async (req, res) => {
 
     res.status(500).json({
       success: false,
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -276,7 +278,6 @@ app.get('/api/b2-test', async (req, res) => {
 
 app.post('/api/materials/upload-url', async (req, res) => {
   try {
-
     const {
       fileName,
       contentType,
@@ -294,7 +295,6 @@ app.post('/api/materials/upload-url', async (req, res) => {
       });
     }
 
-
     if (!contentType) {
       return res.status(400).json({
         success: false,
@@ -305,9 +305,6 @@ app.post('/api/materials/upload-url', async (req, res) => {
 
     // --------------------------------------------------------
     // สร้างชื่อไฟล์สำหรับเก็บใน B2
-    //
-    // ตอนนี้ใช้ชื่อไฟล์เดิม
-    // ภายหลังสามารถเปลี่ยนเป็น subjectCode/year/month ได้
     // --------------------------------------------------------
 
     const storageKey =
@@ -320,17 +317,14 @@ app.post('/api/materials/upload-url', async (req, res) => {
 
     const command = new PutObjectCommand({
       Bucket: process.env.B2_BUCKET_NAME,
-
       Key: storageKey,
-
       ContentType: contentType,
     });
 
 
     // --------------------------------------------------------
     // สร้าง Presigned URL
-    //
-    // URL นี้มีอายุ 10 นาที
+    // URL มีอายุ 10 นาที
     // --------------------------------------------------------
 
     const uploadUrl = await getSignedUrl(
@@ -348,20 +342,14 @@ app.post('/api/materials/upload-url', async (req, res) => {
 
     return res.json({
       success: true,
-
       uploadUrl: uploadUrl,
-
       storageKey: storageKey,
-
       fileName: fileName,
-
       contentType: contentType,
-
       expiresIn: 600,
     });
 
   } catch (error) {
-
     console.error(
       'B2 Presigned URL Error:',
       error
@@ -369,10 +357,8 @@ app.post('/api/materials/upload-url', async (req, res) => {
 
     return res.status(500).json({
       success: false,
-
       message:
         'ไม่สามารถสร้าง Presigned Upload URL ได้',
-
       error: error.message,
     });
   }
@@ -380,23 +366,15 @@ app.post('/api/materials/upload-url', async (req, res) => {
 
 
 // ============================================================
-// START SERVER
+// BACKBLAZE B2 - SET CORS
 // ============================================================
-
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-  console.log(
-    `Backend Server running on port ${PORT}`
-  );
-});
-
 
 app.put('/api/b2-cors-set', async (req, res) => {
   try {
     await b2.send(
       new PutBucketCorsCommand({
         Bucket: process.env.B2_BUCKET_NAME,
+
         CORSConfiguration: {
           CORSRules: [
             {
@@ -414,8 +392,12 @@ app.put('/api/b2-cors-set', async (req, res) => {
       success: true,
       message: 'B2 CORS updated successfully',
     });
+
   } catch (error) {
-    console.error('B2 CORS Set Error:', error);
+    console.error(
+      'B2 CORS Set Error:',
+      error
+    );
 
     res.status(500).json({
       success: false,
@@ -423,3 +405,48 @@ app.put('/api/b2-cors-set', async (req, res) => {
     });
   }
 });
+
+
+// ============================================================
+// BACKBLAZE B2 - CHECK CORS
+// ============================================================
+
+app.get('/api/b2-cors-test', async (req, res) => {
+  try {
+    const result = await b2.send(
+      new GetBucketCorsCommand({
+        Bucket: process.env.B2_BUCKET_NAME,
+      })
+    );
+
+    res.json({
+      success: true,
+      cors: result.CORSRules,
+    });
+
+  } catch (error) {
+    console.error(
+      'B2 CORS Check Error:',
+      error
+    );
+
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+
+
+// START SERVER
+
+
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log(
+    `Backend Server running on port ${PORT}`
+  );
+});
+
