@@ -6,7 +6,7 @@ import Groq from 'groq-sdk';
 import {
   S3Client,
   HeadBucketCommand,
-  PutObjectCommand,
+  GetBucketCorsCommand,
 } from '@aws-sdk/client-s3';
 
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -387,4 +387,27 @@ app.listen(PORT, () => {
   console.log(
     `Backend Server running on port ${PORT}`
   );
+});
+
+
+app.get('/api/b2-cors-test', async (req, res) => {
+  try {
+    const result = await b2.send(
+      new GetBucketCorsCommand({
+        Bucket: process.env.B2_BUCKET_NAME,
+      })
+    );
+
+    res.json({
+      success: true,
+      cors: result.CORSRules,
+    });
+  } catch (error) {
+    console.error('B2 CORS Error:', error);
+
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
 });
