@@ -5,8 +5,10 @@ import Groq from 'groq-sdk';
 
 import {
   S3Client,
-  HeadBucketCommand,
+   HeadBucketCommand,
+  PutObjectCommand,
   GetBucketCorsCommand,
+  PutBucketCorsCommand,
 } from '@aws-sdk/client-s3';
 
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -390,20 +392,30 @@ app.listen(PORT, () => {
 });
 
 
-app.get('/api/b2-cors-test', async (req, res) => {
+app.put('/api/b2-cors-set', async (req, res) => {
   try {
-    const result = await b2.send(
-      new GetBucketCorsCommand({
+    await b2.send(
+      new PutBucketCorsCommand({
         Bucket: process.env.B2_BUCKET_NAME,
+        CORSConfiguration: {
+          CORSRules: [
+            {
+              AllowedOrigins: ['*'],
+              AllowedMethods: ['GET', 'HEAD', 'PUT'],
+              AllowedHeaders: ['*'],
+              MaxAgeSeconds: 3600,
+            },
+          ],
+        },
       })
     );
 
     res.json({
       success: true,
-      cors: result.CORSRules,
+      message: 'B2 CORS updated successfully',
     });
   } catch (error) {
-    console.error('B2 CORS Error:', error);
+    console.error('B2 CORS Set Error:', error);
 
     res.status(500).json({
       success: false,
