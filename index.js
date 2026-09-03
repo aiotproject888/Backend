@@ -8,6 +8,7 @@ import {
   HeadBucketCommand,
   PutObjectCommand,
   GetObjectCommand,
+  DeleteObjectCommand,
   GetBucketCorsCommand,
   PutBucketCorsCommand,
 } from '@aws-sdk/client-s3';
@@ -750,6 +751,67 @@ app.post('/api/materials/download-url', async (req, res) => {
       success: false,
       message:
         'ไม่สามารถสร้าง Presigned Download URL ได้',
+      error: error.message,
+    });
+  }
+});
+
+// ============================================================
+// BACKBLAZE B2 - DELETE FILE
+// ============================================================
+
+app.post('/api/materials/delete', async (req, res) => {
+  try {
+    const {
+      storageKey,
+    } = req.body;
+
+    // --------------------------------------------------------
+    // ตรวจสอบข้อมูล
+    // --------------------------------------------------------
+
+    if (!storageKey) {
+      return res.status(400).json({
+        success: false,
+        message: 'storageKey is required',
+      });
+    }
+
+    // --------------------------------------------------------
+    // ลบไฟล์จาก Backblaze B2
+    // --------------------------------------------------------
+
+    const command = new DeleteObjectCommand({
+      Bucket: process.env.B2_BUCKET_NAME,
+      Key: storageKey,
+    });
+
+    await b2.send(command);
+
+    // --------------------------------------------------------
+    // สำเร็จ
+    // --------------------------------------------------------
+
+    console.log(
+      'B2 File Deleted:',
+      storageKey
+    );
+
+    return res.json({
+      success: true,
+      message: 'ลบไฟล์จาก Backblaze B2 สำเร็จ',
+      storageKey: storageKey,
+    });
+
+  } catch (error) {
+    console.error(
+      'B2 Delete File Error:',
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: 'ไม่สามารถลบไฟล์จาก Backblaze B2 ได้',
       error: error.message,
     });
   }
