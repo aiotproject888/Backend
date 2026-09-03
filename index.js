@@ -679,6 +679,82 @@ app.post('/api/materials/upload-url', async (req, res) => {
   }
 });
 
+// ============================================================
+// BACKBLAZE B2 - CREATE PRESIGNED DOWNLOAD URL
+// ============================================================
+
+app.post('/api/materials/download-url', async (req, res) => {
+  try {
+    const {
+      storageKey,
+      fileName,
+    } = req.body;
+
+    // --------------------------------------------------------
+    // ตรวจสอบข้อมูล
+    // --------------------------------------------------------
+
+    if (!storageKey) {
+      return res.status(400).json({
+        success: false,
+        message: 'storageKey is required',
+      });
+    }
+
+    // --------------------------------------------------------
+    // สร้างคำสั่ง Download
+    // --------------------------------------------------------
+
+    const command = new GetObjectCommand({
+      Bucket: process.env.B2_BUCKET_NAME,
+      Key: storageKey,
+
+      ...(fileName && {
+        ResponseContentDisposition:
+          `attachment; filename="${encodeURIComponent(fileName)}"`,
+      }),
+    });
+
+    // --------------------------------------------------------
+    // สร้าง Presigned Download URL
+    // URL มีอายุ 10 นาที
+    // --------------------------------------------------------
+
+    const downloadUrl = await getSignedUrl(
+      b2,
+      command,
+      {
+        expiresIn: 600,
+      },
+    );
+
+    // --------------------------------------------------------
+    // ส่ง URL กลับไปให้ Flutter
+    // --------------------------------------------------------
+
+    return res.json({
+      success: true,
+      downloadUrl: downloadUrl,
+      storageKey: storageKey,
+      fileName: fileName || null,
+      expiresIn: 600,
+    });
+
+  } catch (error) {
+    console.error(
+      'B2 Presigned Download URL Error:',
+      error,
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        'ไม่สามารถสร้าง Presigned Download URL ได้',
+      error: error.message,
+    });
+  }
+});
+
 
 // ============================================================
 // BACKBLAZE B2 - SET CORS
