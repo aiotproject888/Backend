@@ -151,6 +151,7 @@ app.post('/api/chat', async (req, res) => {
       emotionData,
       subjectCode,
       lessonMaterials,
+      model = 'gpt-oss-20b',
     } = req.body;
 
     // ==========================================================
@@ -485,18 +486,28 @@ ${isClassroom
       },
     ];
 
-    // ==========================================================
-    // ส่งไป GPT-OSS-20B ผ่าน Groq
-    // ==========================================================
-
     const chatCompletion =
-      await groq.chat.completions.create({
-        messages: messages,
+      async function generateAIResponse({
+        model,
+        messages,
+      }) {
+        // GPT-OSS
+        if (model === 'gpt-oss-20b') {
+          return await generateWithGroq(messages);
+        }
 
-        model: 'openai/gpt-oss-20b',
+        // Gemini
+        if (model === 'gemini') {
+          return await generateWithGemini(messages);
+        }
 
-        temperature: 0.7,
-      });
+        // Gemma
+        if (model === 'gemma') {
+          return await generateWithGemma(messages);
+        }
+
+        throw new Error(`ไม่รองรับ AI Model: ${model}`);
+      }
 
     // ==========================================================
     // ดึงคำตอบ
