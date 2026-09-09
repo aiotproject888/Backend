@@ -53,14 +53,14 @@ const AI_MODELS = {
 
   'gemma-4-31b': {
     provider: 'openrouter',
-    model: 'google/gemma-4-31b-it:free',
-    name: 'Gemma 4 31B',
+    model: 'liquid/lfm-2.5-2.6b:free',
+    name: 'LFM2.5-2.6B',
   },
 
   'nemotron-3-ultra': {
     provider: 'openrouter',
-    model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
-    name: 'Nemotron 3 Ultra',
+    model: 'nvidia/nemotron-3-super-120b-a12b:free',
+    name: 'Nemotron 3 Super',
   },
 };
 
