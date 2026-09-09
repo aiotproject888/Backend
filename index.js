@@ -27,9 +27,7 @@ app.use(cors());
 app.use(express.json());
 
 
-// ============================================================
-// GROQ
-// ============================================================
+
 
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
@@ -51,13 +49,13 @@ const AI_MODELS = {
     name: 'Qwen 3.8 27B',
   },
 
-  'gemma-4-31b': {
+  'lfm-2.5-2.6b': {
     provider: 'openrouter',
     model: 'liquid/lfm-2.5-2.6b:free',
     name: 'LFM2.5-2.6B',
   },
 
-  'nemotron-3-ultra': {
+  'nemotron-3-super-120b-a12b': {
     provider: 'openrouter',
     model: 'nvidia/nemotron-3-super-120b-a12b:free',
     name: 'Nemotron 3 Super',
@@ -305,7 +303,13 @@ ${text}
         })
         .join('\n\n--------------------------------\n\n');
 
-      lessonContent = materialsText;
+      const MAX_MATERIAL_CHARS = 50000;
+
+      lessonContent = materialsText.slice(0, MAX_MATERIAL_CHARS);
+
+      if (materialsText.length > MAX_MATERIAL_CHARS) {
+        lessonContent += '\n\n[เนื้อหาถูกตัดเนื่องจากมีขนาดใหญ่เกินกำหนด]';
+      }
     }
 
     // ==========================================================
@@ -648,32 +652,6 @@ ${isClassroom
 
 
 // ============================================================
-// GROQ MODELS API
-// ============================================================
-
-app.get('/api/models', async (req, res) => {
-  try {
-    const list = await groq.models.list();
-
-    const modelIds = list.data.map((m) => m.id);
-
-    res.json({
-      success: true,
-      models: modelIds,
-    });
-
-  } catch (error) {
-    console.error('Groq Models Error:', error);
-
-    res.status(500).json({
-      success: false,
-      error: error.message,
-    });
-  }
-});
-
-
-// ============================================================
 // BACKBLAZE B2 CONNECTION TEST
 // ============================================================
 
@@ -713,6 +691,15 @@ app.post('/api/materials/upload-url', async (req, res) => {
       fileName,
       contentType,
     } = req.body;
+
+    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
+    
+    if (fileSize > MAX_FILE_SIZE) {
+      return res.status(400).json({
+        success: false,
+        message: 'ไฟล์มีขนาดเกิน 50 MB',
+      });
+    }
 
 
     // --------------------------------------------------------
