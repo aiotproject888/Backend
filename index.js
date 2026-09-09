@@ -151,7 +151,7 @@ app.post('/api/chat', async (req, res) => {
       emotionData,
       subjectCode,
       lessonMaterials,
-      model = 'gpt-oss-20b',
+      model = 'gpt-oss-120b',
     } = req.body;
 
     // ==========================================================
@@ -491,8 +491,7 @@ ${isClassroom
         model,
         messages,
       }) {
-        // GPT-OSS
-        if (model === 'gpt-oss-20b') {
+        if (model === 'gpt-oss-120b') {
           return await generateWithGroq(messages);
         }
 
