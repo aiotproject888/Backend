@@ -35,6 +35,90 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
+const OPENROUTER_API_URL =
+  'https://openrouter.ai/api/v1/chat/completions';
+
+const AI_MODELS = {
+  'gpt-oss-120b': {
+    provider: 'groq',
+    model: 'openai/gpt-oss-120b',
+    name: 'GPT-OSS 120B',
+  },
+
+  'qwen3.8-27b': {
+    provider: 'groq',
+    model: 'qwen/qwen3.8-27b',
+    name: 'Qwen 3.8 27B',
+  },
+
+  'gemma-4-31b': {
+    provider: 'openrouter',
+    model: 'google/gemma-4-31b-it:free',
+    name: 'Gemma 4 31B',
+  },
+
+  'nemotron-3-ultra': {
+    provider: 'openrouter',
+    model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+    name: 'Nemotron 3 Ultra',
+  },
+};
+
+async function generateWithGroq(model, messages) {
+  const completion =
+    await groq.chat.completions.create({
+      model: model,
+      messages: messages,
+      reasoning_effort: 'medium',
+    });
+
+  return completion;
+}
+
+async function generateWithOpenRouter(model, messages) {
+  const response = await fetch(
+    OPENROUTER_API_URL,
+    {
+      method: 'POST',
+
+      headers: {
+        'Authorization':
+          `Bearer ${process.env.OPENROUTER_API_KEY}`,
+
+        'Content-Type':
+          'application/json',
+
+        'HTTP-Referer':
+          'https://groq-backend-yzr8.onrender.com',
+
+        'X-Title':
+          'EmotiTeach',
+      },
+
+      body: JSON.stringify({
+        model: model,
+        messages: messages,
+      }),
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    console.error(
+      'OpenRouter API Error:',
+      data
+    );
+
+    throw new Error(
+      data?.error?.message ||
+      'OpenRouter API request failed'
+    );
+  }
+
+  return data;
+}
+
 
 // ============================================================
 // BACKBLAZE B2
@@ -251,29 +335,21 @@ ${text}
 
 2. ใช้ภาษาสุภาพ เป็นมิตร และเข้าใจง่าย
 
-3. ตอบให้เป็นธรรมชาติ
-ไม่พูดเหมือนตำรา
+3. ตอบให้เป็นธรรมชาติไม่พูดเหมือนตำรา
 
-4. ตอบตรงคำถาม
-ไม่เกริ่นนำยาว
+4. ตอบตรงคำถามไม่เกริ่นนำยาว
 
-5. หากเป็นคำถามทั่วไป
-ให้ตอบประมาณ 2-4 ประโยค
+5. หากเป็นคำถามทั่วไปให้ตอบประมาณ 2-4 ประโยค
 
-6. หากมีหลายข้อ
-ให้ใช้ bullet points
+6. หากมีหลายข้อให้ใช้ bullet points
 
 7. หลีกเลี่ยงคำตอบที่ซ้ำหรือวกวน
 
-8. ไม่จำเป็นต้องมีข้อมูลอารมณ์
-เพื่อให้สามารถตอบคำถามทั่วไปได้
+8. ไม่จำเป็นต้องมีข้อมูลอารมณ์เพื่อให้สามารถตอบคำถามทั่วไปได้
 
-9. ข้อมูลอารมณ์เป็นข้อมูลเสริม
-ไม่ใช่เงื่อนไขบังคับในการสนทนา
+9. ข้อมูลอารมณ์เป็นข้อมูลเสริมไม่ใช่เงื่อนไขบังคับในการสนทนา
 
-10. หากไม่มีข้อมูลอารมณ์
-ห้ามตอบว่า "ข้อมูลไม่เพียงพอ"
-เพียงเพราะไม่มีข้อมูลอารมณ์
+10. หากไม่มีข้อมูลอารมณ์ ห้ามตอบว่า "ข้อมูลไม่เพียงพอ" เพียงเพราะไม่มีข้อมูลอารมณ์
 
 
 ============================================================
@@ -305,13 +381,10 @@ ${text}
 หากมีข้อมูลเนื้อหาบทเรียนจากระบบ:
 
 - สามารถใช้เนื้อหานั้นประกอบการตอบคำถาม
-- หากผู้ใช้ถามเกี่ยวกับเนื้อหาที่อยู่ในไฟล์
-ให้ยึดข้อมูลจากเนื้อหาที่ระบบส่งมาเป็นหลัก
+- หากผู้ใช้ถามเกี่ยวกับเนื้อหาที่อยู่ในไฟล์ให้ยึดข้อมูลจากเนื้อหาที่ระบบส่งมาเป็นหลัก
 - ห้ามอ้างว่าไฟล์มีข้อมูลที่ไม่มีอยู่จริง
-- หากเนื้อหาในไฟล์ไม่เกี่ยวข้องกับคำถาม
-สามารถใช้ความรู้ทั่วไปช่วยตอบได้
-- หากข้อมูลในไฟล์ไม่เพียงพอ
-ให้บอกตามความจริง
+- หากเนื้อหาในไฟล์ไม่เกี่ยวข้องกับคำถามสามารถใช้ความรู้ทั่วไปช่วยตอบได้
+- หากข้อมูลในไฟล์ไม่เพียงพอให้บอกตามความจริง
 - ห้ามสร้างข้อความหรือข้อมูลจากไฟล์ขึ้นมาเอง
 
 
@@ -319,8 +392,7 @@ ${text}
 การวิเคราะห์เนื้อหาบทเรียน + Emotion
 ============================================================
 
-หากผู้ใช้ถามเกี่ยวกับการปรับการสอน
-และระบบมีทั้ง:
+หากผู้ใช้ถามเกี่ยวกับการปรับการสอนและระบบมีทั้ง:
 
 1. เนื้อหาบทเรียน
 2. ข้อมูลอารมณ์ของนักเรียน
@@ -382,10 +454,7 @@ ${text}
 - อธิบายบทเรียน
 - วิเคราะห์เนื้อหาบทเรียน
 - ช่วยวางแผนการสอน
-- ให้คำแนะนำด้านการสอนทั่วไป
-
-ได้ตามปกติ
-
+- ให้คำแนะนำด้านการสอนทั่วไปได้ตามปกติ
 
 ============================================================
 การจัดการเรื่องความเครียด
@@ -486,37 +555,73 @@ ${isClassroom
       },
     ];
 
-    const chatCompletion =
-      async function generateAIResponse({
-        model,
-        messages,
-      }) {
-        if (model === 'gpt-oss-120b') {
-          return await generateWithGroq(messages);
-        }
+    // ==========================================================
+    // SELECT AI MODEL
+    // ==========================================================
 
-        // Gemini
-        if (model === 'gemini') {
-          return await generateWithGemini(messages);
-        }
+    const selectedModel =
+      AI_MODELS[model];
 
-        // Gemma
-        if (model === 'gemma') {
-          return await generateWithGemma(messages);
-        }
+    if (!selectedModel) {
+      throw new Error(
+        `ไม่รองรับ AI Model: ${model}`
+      );
+    }
 
-        throw new Error(`ไม่รองรับ AI Model: ${model}`);
-      }
+    console.log(
+      'AI Model:',
+      selectedModel.name
+    );
+
+    console.log(
+      'Provider:',
+      selectedModel.provider
+    );
+
+    console.log(
+      'Model ID:',
+      selectedModel.model
+    );
+
+
+    // ==========================================================
+    // GENERATE RESPONSE
+    // ==========================================================
+
+    let chatCompletion;
+
+    if (
+      selectedModel.provider === 'groq'
+    ) {
+      chatCompletion =
+        await generateWithGroq(
+          selectedModel.model,
+          messages
+        );
+    }
+
+    else if (
+      selectedModel.provider === 'openrouter'
+    ) {
+      chatCompletion =
+        await generateWithOpenRouter(
+          selectedModel.model,
+          messages
+        );
+    }
+
+    else {
+      throw new Error(
+        `ไม่รองรับ Provider: ${selectedModel.provider}`
+      );
+    }
 
     // ==========================================================
     // ดึงคำตอบ
     // ==========================================================
 
     const reply =
-      chatCompletion
-        .choices[0]
-        ?.message
-        ?.content ||
+      chatCompletion?.choices?.[0]?.message?.content ||
       'ไม่สามารถประมวลผลคำตอบได้';
 
     // ==========================================================
