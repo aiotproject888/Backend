@@ -74,17 +74,28 @@ async function generateWithGroq(model, messages) {
 }
 
 async function generateWithOpenRouter(model, messages) {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+
+  // ตรวจสอบว่า Render มี API Key จริงหรือไม่
+  if (!apiKey || apiKey.trim() === '') {
+    throw new Error(
+      'OPENROUTER_API_KEY ไม่พบใน Environment Variables ของ Render'
+    );
+  }
+
+  console.log(
+    'OpenRouter API Key loaded:',
+    apiKey.substring(0, 8) + '...'
+  );
+
   const response = await fetch(
-    OPENROUTER_API_URL,
+    'https://openrouter.ai/api/v1/chat/completions',
     {
       method: 'POST',
 
       headers: {
-        'Authorization':
-          `Bearer ${process.env.OPENROUTER_API_KEY}`,
-
-        'Content-Type':
-          'application/json',
+        'Authorization': `Bearer ${apiKey.trim()}`,
+        'Content-Type': 'application/json',
 
         'HTTP-Referer':
           'https://groq-backend-yzr8.onrender.com',
@@ -102,15 +113,20 @@ async function generateWithOpenRouter(model, messages) {
 
   const data = await response.json();
 
-  if (!response.ok) {
-    console.error(
-      'OpenRouter API Error:',
-      data
-    );
+  console.log(
+    'OpenRouter Status:',
+    response.status
+  );
 
+  console.log(
+    'OpenRouter Response:',
+    data
+  );
+
+  if (!response.ok) {
     throw new Error(
       data?.error?.message ||
-      'OpenRouter API request failed'
+      `OpenRouter API Error ${response.status}`
     );
   }
 
@@ -694,7 +710,7 @@ app.post('/api/materials/upload-url', async (req, res) => {
     } = req.body;
 
     const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
-    
+
     if (fileSize > MAX_FILE_SIZE) {
       return res.status(400).json({
         success: false,
