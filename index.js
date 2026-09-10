@@ -690,6 +690,7 @@ app.post('/api/materials/upload-url', async (req, res) => {
     const {
       fileName,
       contentType,
+      fileSize,
     } = req.body;
 
     const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
@@ -701,18 +702,12 @@ app.post('/api/materials/upload-url', async (req, res) => {
       });
     }
 
-
-    // --------------------------------------------------------
-    // ตรวจสอบข้อมูล
-    // --------------------------------------------------------
-
     if (!fileName) {
       return res.status(400).json({
         success: false,
         message: 'fileName is required',
       });
     }
-
     if (!contentType) {
       return res.status(400).json({
         success: false,
@@ -720,31 +715,17 @@ app.post('/api/materials/upload-url', async (req, res) => {
       });
     }
 
-
-    // --------------------------------------------------------
     // สร้างชื่อไฟล์สำหรับเก็บใน B2
     // --------------------------------------------------------
 
     const storageKey =
       `materials/${Date.now()}-${fileName}`;
 
-
-    // --------------------------------------------------------
-    // สร้างคำสั่ง Upload
-    // --------------------------------------------------------
-
     const command = new PutObjectCommand({
       Bucket: process.env.B2_BUCKET_NAME,
       Key: storageKey,
       ContentType: contentType,
     });
-
-
-    // --------------------------------------------------------
-    // สร้าง Presigned URL
-    // URL มีอายุ 10 นาที
-    // --------------------------------------------------------
-
     const uploadUrl = await getSignedUrl(
       b2,
       command,
@@ -754,10 +735,8 @@ app.post('/api/materials/upload-url', async (req, res) => {
     );
 
 
-    // --------------------------------------------------------
-    // ส่ง URL กลับไปให้ Flutter
-    // --------------------------------------------------------
 
+    // ส่ง URL กลับไปให้ Flutter
     return res.json({
       success: true,
       uploadUrl: uploadUrl,
@@ -782,10 +761,7 @@ app.post('/api/materials/upload-url', async (req, res) => {
   }
 });
 
-// ============================================================
-// BACKBLAZE B2 - CREATE PRESIGNED DOWNLOAD URL
-// ============================================================
-
+//////
 app.post('/api/materials/download-url', async (req, res) => {
   try {
     const {
@@ -793,9 +769,6 @@ app.post('/api/materials/download-url', async (req, res) => {
       fileName,
     } = req.body;
 
-    // --------------------------------------------------------
-    // ตรวจสอบข้อมูล
-    // --------------------------------------------------------
 
     if (!storageKey) {
       return res.status(400).json({
