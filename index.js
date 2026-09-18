@@ -3,6 +3,9 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import Groq from 'groq-sdk';
 
+import fs from 'fs/promises';
+import os from 'os';
+
 import {
   S3Client,
   HeadBucketCommand,
@@ -24,7 +27,7 @@ dotenv.config();
 const app = express();
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 
 // ============================================================
@@ -226,6 +229,63 @@ async function extractPdfText(buffer) {
   return text.trim();
 }
 
+async function extractPptxText(buffer) {
+  const tempFile = `${os.tmpdir()}/emotiteach-${Date.now()}.pptx`;
+
+  try {
+    // เขียน Buffer ของ PPTX เป็นไฟล์ชั่วคราว
+    await fs.writeFile(tempFile, buffer);
+
+    // สร้างตัวอ่าน PPTX
+    const pptx2json = new PPTX2Json();
+
+    // แปลง PPTX → JSON
+    const json =
+      await pptx2json.toJson(tempFile);
+
+    // ดึงข้อความออกจาก JSON
+    const texts = [];
+
+    function collectText(value) {
+      if (!value) {
+        return;
+      }
+
+      if (typeof value === 'string') {
+        const text = value.trim();
+
+        if (text) {
+          texts.push(text);
+        }
+
+        return;
+      }
+
+      if (Array.isArray(value)) {
+        value.forEach(collectText);
+        return;
+      }
+
+      if (typeof value === 'object') {
+        Object.values(value).forEach(
+          collectText
+        );
+      }
+    }
+
+    collectText(json);
+
+    return texts.join('\n');
+  } finally {
+    // ลบไฟล์ชั่วคราวที่สร้างขึ้น
+    await fs.rm(
+      tempFile,
+      {
+        force: true,
+      }
+    );
+  }
+}
 
 // ============================================================
 // EXTRACT TEXT FROM FILE
@@ -270,6 +330,22 @@ async function extractTextFromFile(
     return {
       text: result.value ?? '',
       type: 'docx',
+    };
+  }
+
+  // PPTX
+  if (
+    ext === 'pptx' ||
+    contentType?.includes(
+      'presentationml.presentation'
+    )
+  ) {
+    const text =
+      await extractPptxText(buffer);
+
+    return {
+      text,
+      type: 'pptx',
     };
   }
 
@@ -356,51 +432,77 @@ app.post('/api/chat', async (req, res) => {
       );
 
 
-      const materialsText =
-        lessonMaterials
-          .map((material, index) => {
+      const MAX_CHARS_PER_FILE = 50000;
+      const MAX_TOTAL_MATERIAL_CHARS = 100000;
 
-            const fileName =
-              material?.fileName ||
-              `ไฟล์ที่ ${index + 1}`;
+      let totalChars = 0;
+      const materialParts = [];
 
-            const text =
-              material?.text || '';
+      lessonMaterials.forEach((material, index) => {
+        if (totalChars >= MAX_TOTAL_MATERIAL_CHARS) {
+          return;
+        }
 
+        const fileName =
+          material?.fileName ||
+          `ไฟล์ที่ ${index + 1}`;
 
-            return `
+        const originalText =
+          typeof material?.text === 'string'
+            ? material.text
+            : '';
+
+        // จำกัดแต่ละไฟล์ไม่เกิน 50,000 ตัวอักษร
+        const fileText =
+          originalText.slice(
+            0,
+            MAX_CHARS_PER_FILE
+          );
+
+        // เหลือพื้นที่สำหรับไฟล์นี้เท่าไร
+        const remainingChars =
+          MAX_TOTAL_MATERIAL_CHARS - totalChars;
+
+        // ถ้าไฟล์นี้ทำให้เกิน limit รวม ให้ตัดเพิ่ม
+        const allowedText =
+          fileText.slice(
+            0,
+            remainingChars
+          );
+
+        const wasFileTruncated =
+          originalText.length >
+          allowedText.length;
+
+        materialParts.push(
+          `
 ไฟล์ที่ ${index + 1}
 ชื่อไฟล์: ${fileName}
 
 เนื้อหา:
-${text}
-            `.trim();
+${allowedText}
 
-          })
-          .join(
-            '\n\n--------------------------------\n\n'
-          );
-
-
-      const MAX_MATERIAL_CHARS =
-        50000;
-
-
-      lessonContent =
-        materialsText.slice(
-          0,
-          MAX_MATERIAL_CHARS
+${wasFileTruncated
+              ? '[เนื้อหาของไฟล์นี้ถูกตัดบางส่วนเนื่องจากข้อจำกัดขนาด]'
+              : ''
+            }
+    `.trim()
         );
 
+        totalChars += allowedText.length;
+      });
+
+      lessonContent =
+        materialParts.join(
+          '\n\n--------------------------------\n\n'
+        );
 
       if (
-        materialsText.length >
-        MAX_MATERIAL_CHARS
+        totalChars >=
+        MAX_TOTAL_MATERIAL_CHARS
       ) {
-
         lessonContent +=
-          '\n\n[เนื้อหาถูกตัดเนื่องจากมีขนาดใหญ่เกินกำหนด]';
-
+          '\n\n[เนื้อหาสื่อการสอนรวมถูกจำกัดไว้ที่ 100,000 ตัวอักษร]';
       }
 
     }
@@ -1740,13 +1842,13 @@ app.post(
           fileName,
 
         fileType:
-          contentType,
+          extracted.type,
 
         textLength:
           extracted.text.length,
 
         extractedText:
-          extracted,
+          extracted.text,
 
       });
 
