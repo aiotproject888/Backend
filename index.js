@@ -58,13 +58,6 @@ const AI_MODELS = {
     model: 'qwen/qwen3.8-27b',
     name: 'Qwen 3.8 27B',
   },
-
-  'lfm-2.5-2.6b': {
-    provider: 'openrouter',
-    model: 'liquid/lfm-2.5-2.6b:free',
-    name: 'LFM2.5-2.6B',
-  },
-
   'nemotron-3-super-120b-a12b': {
     provider: 'openrouter',
     model: 'nvidia/nemotron-3-super-120b-a12b:free',
@@ -1395,7 +1388,7 @@ app.post(
 
 
       const storageKey =
-        `materials / ${Date.now()} -${fileName} `;
+        `materials/${Date.now()}-${fileName}`;
 
 
       const command =
