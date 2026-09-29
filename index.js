@@ -78,8 +78,11 @@ async function generateWithGroq(model, messages) {
 // OPENROUTER GENERATE
 async function generateWithOpenRouter(model, messages) {
   const response = await openrouter.chat.send({
-    model: model,
-    messages: messages,
+    chatRequest: {
+      model: model,
+      messages: messages,
+      stream: false,
+    },
   });
 
   return response;
@@ -685,6 +688,16 @@ ${emotionData ? JSON.stringify(emotionData) : 'ไม่มีข้อมูล
         : (
           Array.isArray(history)
             ? history
+                .filter((item) =>
+                  item &&
+                  (item.role === 'user' || item.role === 'assistant') &&
+                  typeof item.content === 'string'
+                )
+                .slice(-8)
+                .map((item) => ({
+                  role: item.role,
+                  content: item.content.slice(0, 1200),
+                }))
             : []
         )
       ),
