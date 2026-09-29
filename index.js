@@ -17,8 +17,8 @@ import {
 } from '@aws-sdk/client-s3';
 
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
-import mammoth from 'mammoth';
-import PPTX2Json from 'pptx2json';
+//import mammoth from 'mammoth';
+//import PPTX2Json from 'pptx2json';
 
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
@@ -30,22 +30,17 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
 
-// ============================================================
-// GROQ
-// ============================================================
 
+// GROQ
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
-
+// OpenRouter
 const OPENROUTER_API_URL =
   'https://openrouter.ai/api/v1/chat/completions';
 
 
-// ============================================================
 // AI MODELS
-// ============================================================
-
 const AI_MODELS = {
   'gpt-oss-120b': {
     provider: 'groq',
@@ -66,83 +61,26 @@ const AI_MODELS = {
 };
 
 
-// ============================================================
 // GROQ GENERATE
-// ============================================================
-
 async function generateWithGroq(model, messages) {
   const completion =
     await groq.chat.completions.create({
       model: model,
       messages: messages,
-      reasoning_effort: 'medium',
     });
 
   return completion;
 }
 
 
-// ============================================================
 // OPENROUTER GENERATE
-// ============================================================
-
 async function generateWithOpenRouter(model, messages) {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const response = await openrouter.chat.send({
+    model: model,
+    messages: messages,
+  });
 
-  if (!apiKey || apiKey.trim() === '') {
-    throw new Error(
-      'OPENROUTER_API_KEY ไม่พบใน Environment Variables ของ Render'
-    );
-  }
-
-  console.log(
-    'OpenRouter API Key loaded:',
-    apiKey.substring(0, 8) + '...'
-  );
-
-  const response = await fetch(
-    OPENROUTER_API_URL,
-    {
-      method: 'POST',
-
-      headers: {
-        'Authorization': `Bearer ${apiKey.trim()}`,
-        'Content-Type': 'application/json',
-
-        'HTTP-Referer':
-          'https://groq-backend-yzr8.onrender.com',
-
-        'X-Title':
-          'EmotiTeach',
-      },
-
-      body: JSON.stringify({
-        model: model,
-        messages: messages,
-      }),
-    }
-  );
-
-  const data = await response.json();
-
-  console.log(
-    'OpenRouter Status:',
-    response.status
-  );
-
-  console.log(
-    'OpenRouter Response:',
-    data
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      data?.error?.message ||
-      `OpenRouter API Error ${response.status}`
-    );
-  }
-
-  return data;
+  return response;
 }
 
 
